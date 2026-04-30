@@ -17,6 +17,9 @@ import {
   Dashboard as DashboardIcon,
   Search,
 } from '@mui/icons-material';
+import JadwalSearch from '@/components/pelanggan/JadwalSearch';
+import PesanTiket from '@/components/pelanggan/PesanTiket';
+import HistoriPemesanan from '@/components/pelanggan/HistoriPemesanan';
 
 const DRAWER_WIDTH = 240;
 
@@ -33,6 +36,7 @@ export default function PelangganDashboard() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [jadwal, setJadwal] = useState<any[]>([]);
   const [histori, setHistori] = useState<any[]>([]);
+  const [selectedJadwal, setSelectedJadwal] = useState<any>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -62,6 +66,11 @@ export default function PelangganDashboard() {
     router.push('/login');
   };
 
+  const handleSelectJadwal = (j: any) => {
+    setSelectedJadwal(j);
+    setActiveMenu('pesan');
+  };
+
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0f1923' }}>
       <Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -88,7 +97,7 @@ export default function PelangganDashboard() {
         {menuItems.map((item) => (
           <ListItem key={item.path} disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
-              onClick={() => setActiveMenu(item.path)}
+              onClick={() => { setActiveMenu(item.path); setSelectedJadwal(null); setMobileOpen(false); }}
               sx={{
                 borderRadius: 2, py: 1.2, px: 2,
                 background: activeMenu === item.path
@@ -132,6 +141,79 @@ export default function PelangganDashboard() {
     </Box>
   );
 
+  const renderContent = () => {
+    switch (activeMenu) {
+      case 'jadwal': return <JadwalSearch onSelectJadwal={handleSelectJadwal} />;
+      case 'pesan': return <PesanTiket initialJadwal={selectedJadwal} onBack={() => setActiveMenu('jadwal')} />;
+      case 'histori': return <HistoriPemesanan />;
+      default: return (
+        <Box>
+          <Typography sx={{ color: 'rgba(255,255,255,0.5)', mb: 3, fontSize: 14 }}>
+            Selamat datang! Mau pergi ke mana hari ini? 🚂
+          </Typography>
+
+          <Grid container spacing={2.5} sx={{ mb: 4 }}>
+            {[
+              { label: 'Tiket Dipesan', value: histori.length, icon: <ConfirmationNumber />, color: '#4facfe', bg: 'rgba(79,172,254,0.1)' },
+              { label: 'Jadwal Tersedia', value: jadwal.length, icon: <EventNote />, color: '#43e97b', bg: 'rgba(67,233,123,0.1)' },
+            ].map(stat => (
+              <Grid item xs={12} sm={6} key={stat.label}>
+                <Card sx={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 3, transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-4px)' } }}>
+                  <CardContent sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Box sx={{ width: 50, height: 50, borderRadius: 2, background: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: stat.color }}>
+                      {stat.icon}
+                    </Box>
+                    <Box>
+                      <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>{stat.label}</Typography>
+                      <Typography sx={{ color: 'white', fontSize: 28, fontWeight: 800 }}>{stat.value}</Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+
+          {/* Jadwal Terbaru */}
+          <Typography sx={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 600, mb: 2, textTransform: 'uppercase', letterSpacing: 1 }}>
+            Jadwal Tersedia
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {jadwal.length === 0 && (
+              <Typography sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Belum ada jadwal tersedia</Typography>
+            )}
+            {jadwal.map((j: any) => (
+              <Card key={j.id} sx={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 3, transition: 'all 0.2s', '&:hover': { borderColor: 'rgba(79,172,254,0.3)', transform: 'translateY(-2px)' } }}>
+                <CardContent sx={{ p: 2.5, display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <Box sx={{ color: '#4facfe' }}><TrainIcon /></Box>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography sx={{ color: 'white', fontWeight: 600, fontSize: 14 }}>
+                      {j.asal_keberangkatan} → {j.tujuan_keberangkatan}
+                    </Typography>
+                    <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
+                      {new Date(j.tanggal_berangkat).toLocaleString('id-ID')}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ textAlign: 'right' }}>
+                    <Typography sx={{ color: '#4facfe', fontWeight: 700, fontSize: 15 }}>
+                      Rp {j.harga?.toLocaleString('id-ID')}
+                    </Typography>
+                    <Button
+                      size="small"
+                      onClick={() => handleSelectJadwal(j)}
+                      sx={{ mt: 0.5, textTransform: 'none', color: '#4facfe', fontSize: 11, p: 0 }}
+                    >
+                      Pesan →
+                    </Button>
+                  </Box>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+        </Box>
+      );
+    }
+  };
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', background: '#111b27' }}>
       <Drawer variant="permanent" sx={{ display: { xs: 'none', md: 'block' }, width: DRAWER_WIDTH, '& .MuiDrawer-paper': { width: DRAWER_WIDTH, border: 'none' } }}>
@@ -151,7 +233,7 @@ export default function PelangganDashboard() {
               {menuItems.find(m => m.path === activeMenu)?.label || 'Dashboard'}
             </Typography>
             <Button
-              onClick={() => setActiveMenu('pesan')}
+              onClick={() => { setActiveMenu('pesan'); setSelectedJadwal(null); }}
               sx={{
                 background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
                 color: 'white', borderRadius: 2, textTransform: 'none',
@@ -165,82 +247,7 @@ export default function PelangganDashboard() {
         </AppBar>
 
         <Box sx={{ flex: 1, p: 3 }}>
-          {activeMenu === 'dashboard' && (
-            <Box>
-              <Typography sx={{ color: 'rgba(255,255,255,0.5)', mb: 3, fontSize: 14 }}>
-                Selamat datang! Mau pergi ke mana hari ini? 🚂
-              </Typography>
-
-              <Grid container spacing={2.5} sx={{ mb: 4 }}>
-                {[
-                  { label: 'Tiket Dipesan', value: histori.length, icon: <ConfirmationNumber />, color: '#4facfe', bg: 'rgba(79,172,254,0.1)' },
-                  { label: 'Jadwal Tersedia', value: jadwal.length, icon: <EventNote />, color: '#43e97b', bg: 'rgba(67,233,123,0.1)' },
-                ].map(stat => (
-                  <Grid item xs={12} sm={6} key={stat.label}>
-                    <Card sx={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 3 }}>
-                      <CardContent sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Box sx={{ width: 50, height: 50, borderRadius: 2, background: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: stat.color }}>
-                          {stat.icon}
-                        </Box>
-                        <Box>
-                          <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>{stat.label}</Typography>
-                          <Typography sx={{ color: 'white', fontSize: 28, fontWeight: 800 }}>{stat.value}</Typography>
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-
-              {/* Jadwal Terbaru */}
-              <Typography sx={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 600, mb: 2, textTransform: 'uppercase', letterSpacing: 1 }}>
-                Jadwal Tersedia
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                {jadwal.length === 0 && (
-                  <Typography sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 13 }}>Belum ada jadwal tersedia</Typography>
-                )}
-                {jadwal.map((j: any) => (
-                  <Card key={j.id} sx={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 3 }}>
-                    <CardContent sx={{ p: 2.5, display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Box sx={{ color: '#4facfe' }}><TrainIcon /></Box>
-                      <Box sx={{ flex: 1 }}>
-                        <Typography sx={{ color: 'white', fontWeight: 600, fontSize: 14 }}>
-                          {j.asal_keberangkatan} → {j.tujuan_keberangkatan}
-                        </Typography>
-                        <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>
-                          {new Date(j.tanggal_berangkat).toLocaleString('id-ID')}
-                        </Typography>
-                      </Box>
-                      <Box sx={{ textAlign: 'right' }}>
-                        <Typography sx={{ color: '#4facfe', fontWeight: 700, fontSize: 15 }}>
-                          Rp {j.harga?.toLocaleString('id-ID')}
-                        </Typography>
-                        <Button
-                          size="small"
-                          onClick={() => setActiveMenu('pesan')}
-                          sx={{ mt: 0.5, textTransform: 'none', color: '#4facfe', fontSize: 11, p: 0 }}
-                        >
-                          Pesan →
-                        </Button>
-                      </Box>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Box>
-            </Box>
-          )}
-
-          {activeMenu !== 'dashboard' && (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 400, flexDirection: 'column', gap: 2 }}>
-              <Box sx={{ color: 'rgba(255,255,255,0.2)', fontSize: 64 }}>
-                {menuItems.find(m => m.path === activeMenu)?.icon}
-              </Box>
-              <Typography sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>
-                Halaman {menuItems.find(m => m.path === activeMenu)?.label} akan segera tersedia
-              </Typography>
-            </Box>
-          )}
+          {renderContent()}
         </Box>
       </Box>
     </Box>

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Box, Drawer, AppBar, Toolbar, Typography, List, ListItem,
   ListItemButton, ListItemIcon, ListItemText, IconButton, Avatar,
-  Card, CardContent, Grid, Chip, Divider, Menu, MenuItem, Tooltip,
+  Card, CardContent, Grid, Chip, Divider, Tooltip,
 } from '@mui/material';
 import {
   Train as TrainIcon,
@@ -22,6 +22,14 @@ import {
   TrendingUp,
   PersonAdd,
 } from '@mui/icons-material';
+import KeretaManagement from '@/components/admin/KeretaManagement';
+import GerbongManagement from '@/components/admin/GerbongManagement';
+import KursiManagement from '@/components/admin/KursiManagement';
+import JadwalManagement from '@/components/admin/JadwalManagement';
+import PelangganManagement from '@/components/admin/PelangganManagement';
+import PetugasManagement from '@/components/admin/PetugasManagement';
+import TransaksiManagement from '@/components/admin/TransaksiManagement';
+import RekapManagement from '@/components/admin/RekapManagement';
 
 const DRAWER_WIDTH = 260;
 
@@ -41,7 +49,6 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [stats, setStats] = useState({ kereta: 0, pelanggan: 0, jadwal: 0, transaksi: 0 });
 
   useEffect(() => {
@@ -113,7 +120,7 @@ export default function AdminDashboard() {
         {menuItems.map((item) => (
           <ListItem key={item.path} disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
-              onClick={() => setActiveMenu(item.path)}
+              onClick={() => { setActiveMenu(item.path); setMobileOpen(false); }}
               sx={{
                 borderRadius: 2,
                 py: 1.2,
@@ -163,6 +170,93 @@ export default function AdminDashboard() {
     </Box>
   );
 
+  const renderContent = () => {
+    switch (activeMenu) {
+      case 'kereta': return <KeretaManagement />;
+      case 'gerbong': return <GerbongManagement />;
+      case 'kursi': return <KursiManagement />;
+      case 'jadwal': return <JadwalManagement />;
+      case 'pelanggan': return <PelangganManagement />;
+      case 'petugas': return <PetugasManagement />;
+      case 'transaksi': return <TransaksiManagement />;
+      case 'rekap': return <RekapManagement />;
+      default: return (
+        <Box>
+          <Typography sx={{ color: 'rgba(255,255,255,0.5)', mb: 3, fontSize: 14 }}>
+            Selamat datang kembali, Admin 👋
+          </Typography>
+
+          {/* Stat Cards */}
+          <Grid container spacing={2.5} sx={{ mb: 4 }}>
+            {statCards.map((stat) => (
+              <Grid item xs={12} sm={6} lg={3} key={stat.label}>
+                <Card sx={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  borderRadius: 3,
+                  transition: 'transform 0.2s',
+                  '&:hover': { transform: 'translateY(-4px)' },
+                }}>
+                  <CardContent sx={{ p: 3 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                      <Box sx={{
+                        width: 44, height: 44, borderRadius: 2,
+                        background: stat.bg,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: stat.color,
+                      }}>
+                        {stat.icon}
+                      </Box>
+                    </Box>
+                    <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, mb: 0.5 }}>
+                      {stat.label}
+                    </Typography>
+                    <Typography sx={{ color: 'white', fontSize: 28, fontWeight: 800 }}>
+                      {stat.value}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+
+          {/* Quick Actions */}
+          <Typography sx={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 600, mb: 2, textTransform: 'uppercase', letterSpacing: 1 }}>
+            Aksi Cepat
+          </Typography>
+          <Grid container spacing={2}>
+            {menuItems.slice(1).map((item) => (
+              <Grid item xs={6} sm={4} md={3} key={item.path}>
+                <Card
+                  onClick={() => setActiveMenu(item.path)}
+                  sx={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.07)',
+                    borderRadius: 3,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      background: 'rgba(245,87,108,0.08)',
+                      borderColor: 'rgba(245,87,108,0.3)',
+                      transform: 'translateY(-2px)',
+                    },
+                  }}
+                >
+                  <CardContent sx={{ p: 2.5, textAlign: 'center' }}>
+                    <Box sx={{ color: '#f5576c', mb: 1 }}>{item.icon}</Box>
+                    <Typography sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 500 }}>
+                      {item.label}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      );
+    }
+  };
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', background: '#111b27' }}>
       {/* Sidebar Desktop */}
@@ -206,94 +300,7 @@ export default function AdminDashboard() {
 
         {/* Page Content */}
         <Box sx={{ flex: 1, p: 3 }}>
-          {activeMenu === 'dashboard' && (
-            <Box>
-              <Typography sx={{ color: 'rgba(255,255,255,0.5)', mb: 3, fontSize: 14 }}>
-                Selamat datang kembali, Admin 👋
-              </Typography>
-
-              {/* Stat Cards */}
-              <Grid container spacing={2.5} sx={{ mb: 4 }}>
-                {statCards.map((stat) => (
-                  <Grid item xs={12} sm={6} lg={3} key={stat.label}>
-                    <Card sx={{
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid rgba(255,255,255,0.07)',
-                      borderRadius: 3,
-                      transition: 'transform 0.2s',
-                      '&:hover': { transform: 'translateY(-4px)' },
-                    }}>
-                      <CardContent sx={{ p: 3 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                          <Box sx={{
-                            width: 44, height: 44, borderRadius: 2,
-                            background: stat.bg,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: stat.color,
-                          }}>
-                            {stat.icon}
-                          </Box>
-                        </Box>
-                        <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, mb: 0.5 }}>
-                          {stat.label}
-                        </Typography>
-                        <Typography sx={{ color: 'white', fontSize: 28, fontWeight: 800 }}>
-                          {stat.value}
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-
-              {/* Quick Actions */}
-              <Typography sx={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: 600, mb: 2, textTransform: 'uppercase', letterSpacing: 1 }}>
-                Aksi Cepat
-              </Typography>
-              <Grid container spacing={2}>
-                {menuItems.slice(1).map((item) => (
-                  <Grid item xs={6} sm={4} md={3} key={item.path}>
-                    <Card
-                      onClick={() => setActiveMenu(item.path)}
-                      sx={{
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.07)',
-                        borderRadius: 3,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        '&:hover': {
-                          background: 'rgba(245,87,108,0.08)',
-                          borderColor: 'rgba(245,87,108,0.3)',
-                          transform: 'translateY(-2px)',
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ p: 2.5, textAlign: 'center' }}>
-                        <Box sx={{ color: '#f5576c', mb: 1 }}>{item.icon}</Box>
-                        <Typography sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: 500 }}>
-                          {item.label}
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
-          )}
-
-          {activeMenu !== 'dashboard' && (
-            <Box sx={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              height: 400, flexDirection: 'column', gap: 2,
-            }}>
-              <Box sx={{ color: 'rgba(255,255,255,0.2)', fontSize: 64 }}>
-                {menuItems.find(m => m.path === activeMenu)?.icon}
-              </Box>
-              <Typography sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>
-                Halaman {menuItems.find(m => m.path === activeMenu)?.label} akan segera tersedia
-              </Typography>
-            </Box>
-          )}
+          {renderContent()}
         </Box>
       </Box>
     </Box>
