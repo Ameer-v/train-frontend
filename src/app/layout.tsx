@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import ThemeRegistry from '@/components/ThemeRegistry';
 
 export const metadata: Metadata = {
-  title: 'KA Citra Indonesia',
+  title: 'KA Cantika Indonesia',
   description: 'Sistem Pemesanan Tiket Kereta Api',
 };
 

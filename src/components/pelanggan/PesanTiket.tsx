@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import {
   Train, ArrowForward, EventNote, AirlineSeatReclineNormal,
-  PersonAdd, CheckCircle, Add, Remove, ArrowBack,
+  PersonAdd, CheckCircle, Add, Remove, ArrowBack, Wc,
 } from '@mui/icons-material';
 import { apiFetch } from '@/lib/api';
 import dayjs from 'dayjs';
@@ -27,6 +27,7 @@ export default function PesanTiket({ initialJadwal, onBack }: Props) {
   const [jadwalList, setJadwalList] = useState<any[]>([]);
   const [selectedJadwal, setSelectedJadwal] = useState<any>(initialJadwal || null);
   const [availableSeats, setAvailableSeats] = useState<any[]>([]);
+  const [allSeats, setAllSeats] = useState<any[]>([]);
   const [passengers, setPassengers] = useState<Passenger[]>([{ NIK: '', nama_penumpang: '', id_kursi: null }]);
   const [loading, setLoading] = useState(false);
   const [seatLoading, setSeatLoading] = useState(false);
@@ -37,20 +38,39 @@ export default function PesanTiket({ initialJadwal, onBack }: Props) {
     if (!initialJadwal) {
       apiFetch('/jadwal').then(r => setJadwalList(Array.isArray(r) ? r : [])).catch(() => {});
     }
-    if (initialJadwal) loadSeats(initialJadwal.id);
+    if (initialJadwal) loadSeats(initialJadwal.id, initialJadwal.id_kereta);
   }, []);
 
-  const loadSeats = async (jadwalId: number) => {
+  const loadSeats = async (jadwalId: number, keretaId?: number) => {
     setSeatLoading(true);
     try {
-      const r = await apiFetch(`/kursi/tersedia?id_jadwal=${jadwalId}`);
-      setAvailableSeats(Array.isArray(r) ? r : []);
+      const [tersedia, semuaKursi, gerbongs] = await Promise.all([
+        apiFetch(`/kursi/tersedia?id_jadwal=${jadwalId}`),
+        apiFetch('/kursi'),
+        apiFetch('/gerbong'),
+      ]);
+      const available = Array.isArray(tersedia) ? tersedia : [];
+      setAvailableSeats(available);
+      // Get gerbong IDs for this kereta
+      const allG = Array.isArray(gerbongs) ? gerbongs : [];
+      const allK = Array.isArray(semuaKursi) ? semuaKursi : [];
+      // Find gerbong IDs from available seats, or from kereta
+      const gerbongIds = new Set<number>();
+      available.forEach((s: any) => { if (s.id_gerbong) gerbongIds.add(s.id_gerbong); });
+      if (keretaId) allG.filter((g: any) => g.id_kereta === keretaId).forEach((g: any) => gerbongIds.add(g.id));
+      // Get all seats for these gerbongs
+      const seatsForTrain = allK.filter((k: any) => gerbongIds.has(k.id_gerbong));
+      // Attach gerbong info
+      seatsForTrain.forEach((s: any) => {
+        if (!s.gerbong) s.gerbong = allG.find((g: any) => g.id === s.id_gerbong);
+      });
+      setAllSeats(seatsForTrain);
     } catch {} finally { setSeatLoading(false); }
   };
 
   const selectJadwal = (j: any) => {
     setSelectedJadwal(j);
-    loadSeats(j.id);
+    loadSeats(j.id, j.id_kereta);
     setStep(1);
   };
 
@@ -160,100 +180,116 @@ export default function PesanTiket({ initialJadwal, onBack }: Props) {
           <Box sx={{ display: 'flex', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
             <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: 1, background: '#43e97b' }} />} label="Tersedia" size="small" sx={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', fontSize: 11 }} />
             <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: 1, background: '#4facfe' }} />} label="Dipilih" size="small" sx={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', fontSize: 11 }} />
-            <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: 1, background: 'rgba(255,255,255,0.08)' }} />} label="Terisi" size="small" sx={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', fontSize: 11 }} />
+            <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: 1, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }} />} label="Terisi" size="small" sx={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', fontSize: 11 }} />
           </Box>
           {seatLoading ? <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={30} sx={{ color: '#4facfe' }} /></Box> : (() => {
-            // Group seats by gerbong
+            const availableIds = new Set(availableSeats.map((s: any) => s.id));
+            // Group ALL seats by gerbong
             const gerbongMap: Record<number, { nama: string; seats: any[] }> = {};
-            availableSeats.forEach(seat => {
+            allSeats.forEach(seat => {
               const gId = seat.id_gerbong || 0;
               if (!gerbongMap[gId]) gerbongMap[gId] = { nama: seat.gerbong?.nama_gerbong || `Gerbong ${gId}`, seats: [] };
               gerbongMap[gId].seats.push(seat);
             });
             const gerbongs = Object.entries(gerbongMap);
             if (gerbongs.length === 0) return <Typography sx={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', py: 4 }}>Tidak ada kursi tersedia</Typography>;
+
+            // Helper: parse seat name like "A1" -> { col: "A", row: 1 }
+            const parseSeat = (name: string) => {
+              const letter = name.replace(/[0-9]/g, '').toUpperCase();
+              const num = parseInt(name.replace(/\D/g, '')) || 0;
+              return { col: letter, row: num };
+            };
+            const colOrder = ['A', 'B', 'C', 'D'];
+
+            // Render a single seat cell
+            const renderSeat = (seat: any | null, colLabel: string) => {
+              if (!seat) return <Box key={`empty-${colLabel}`} sx={{ width: 48, height: 44 }} />;
+              const isAvail = availableIds.has(seat.id);
+              const isSel = selectedSeatIds.includes(seat.id);
+              const isOccupied = !isAvail && !isSel;
+              return (
+                <Box key={seat.id} onClick={() => isAvail || isSel ? toggleSeat(seat) : null} sx={{
+                  width: 48, height: 44, borderRadius: '8px 8px 4px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', position: 'relative',
+                  cursor: isOccupied ? 'not-allowed' : 'pointer',
+                  background: isSel ? 'rgba(79,172,254,0.25)' : isOccupied ? 'rgba(255,255,255,0.04)' : 'rgba(67,233,123,0.08)',
+                  border: `2px solid ${isSel ? '#4facfe' : isOccupied ? 'rgba(255,255,255,0.08)' : 'rgba(67,233,123,0.25)'}`,
+                  boxShadow: isSel ? '0 0 12px rgba(79,172,254,0.3)' : 'none',
+                  opacity: isOccupied ? 0.4 : 1,
+                  transition: 'all 0.2s',
+                  ...(!isOccupied ? { '&:hover': { transform: 'scale(1.08)', borderColor: '#4facfe', boxShadow: '0 0 12px rgba(79,172,254,0.2)' } } : {}),
+                }}>
+                  <Box sx={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: 4, borderRadius: '4px 4px 0 0', background: isSel ? 'rgba(79,172,254,0.4)' : isOccupied ? 'rgba(255,255,255,0.06)' : 'rgba(67,233,123,0.2)' }} />
+                  <AirlineSeatReclineNormal sx={{ fontSize: 14, color: isSel ? '#4facfe' : isOccupied ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.2)', mb: -0.3 }} />
+                  <Typography sx={{ color: isSel ? '#4facfe' : isOccupied ? 'rgba(255,255,255,0.25)' : '#43e97b', fontWeight: 700, fontSize: 11 }}>{seat.no_kursi}</Typography>
+                </Box>
+              );
+            };
+
             return (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {gerbongs.map(([gId, g]) => {
-                  // Arrange seats in rows of 4 (2 | aisle | 2)
-                  const sorted = [...g.seats].sort((a, b) => {
-                    const nA = parseInt(a.no_kursi.replace(/\D/g, '')) || 0;
-                    const nB = parseInt(b.no_kursi.replace(/\D/g, '')) || 0;
-                    return nA - nB;
+                  // Build row map: { rowNum: { A: seat, B: seat, C: seat, D: seat } }
+                  const rowMap: Record<number, Record<string, any>> = {};
+                  const availCount = g.seats.filter(s => availableIds.has(s.id)).length;
+                  g.seats.forEach(seat => {
+                    const { col, row } = parseSeat(seat.no_kursi);
+                    if (!rowMap[row]) rowMap[row] = {};
+                    rowMap[row][col] = seat;
                   });
-                  const rows: any[][] = [];
-                  for (let i = 0; i < sorted.length; i += 4) rows.push(sorted.slice(i, i + 4));
+                  const rowNums = Object.keys(rowMap).map(Number).sort((a, b) => a - b);
+
                   return (
-                    <Card key={gId} sx={{ ...cs, overflow: 'visible', position: 'relative' }}>
+                    <Card key={gId} sx={{ ...cs, overflow: 'hidden' }}>
                       {/* Carriage header */}
-                      <Box sx={{ background: 'linear-gradient(135deg, rgba(79,172,254,0.15) 0%, rgba(0,242,254,0.08) 100%)', borderBottom: '1px solid rgba(79,172,254,0.15)', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, borderRadius: '12px 12px 0 0' }}>
+                      <Box sx={{ background: 'linear-gradient(135deg, rgba(79,172,254,0.15) 0%, rgba(0,242,254,0.08) 100%)', borderBottom: '1px solid rgba(79,172,254,0.15)', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
                         <Box sx={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(79,172,254,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Train sx={{ color: '#4facfe', fontSize: 18 }} />
                         </Box>
                         <Box sx={{ flex: 1 }}>
                           <Typography sx={{ color: 'white', fontWeight: 700, fontSize: 14 }}>{g.nama}</Typography>
-                          <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>{g.seats.length} kursi tersedia</Typography>
+                          <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>{availCount} kursi tersedia dari {g.seats.length}</Typography>
                         </Box>
                         <AirlineSeatReclineNormal sx={{ color: 'rgba(255,255,255,0.2)', fontSize: 20 }} />
                       </Box>
                       {/* Carriage body */}
                       <Box sx={{ p: 2, background: 'linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.1) 100%)' }}>
-                        {/* Train shape decoration */}
-                        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1.5 }}>
-                          <Typography sx={{ color: 'rgba(255,255,255,0.15)', fontSize: 10, letterSpacing: 3, textTransform: 'uppercase' }}>← Depan &nbsp;&nbsp;│&nbsp;&nbsp; Belakang →</Typography>
+                        {/* BORDES top */}
+                        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1.5, gap: 1, alignItems: 'center' }}>
+                          <Box sx={{ height: 1, flex: 1, background: 'rgba(255,255,255,0.06)' }} />
+                          <Wc sx={{ color: 'rgba(255,255,255,0.2)', fontSize: 16 }} />
+                          <Typography sx={{ color: 'rgba(255,255,255,0.25)', fontSize: 10, fontWeight: 700, letterSpacing: 2 }}>BORDES</Typography>
+                          <Box sx={{ height: 1, flex: 1, background: 'rgba(255,255,255,0.06)' }} />
+                        </Box>
+                        {/* Column labels */}
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5, mb: 1 }}>
+                          {['A', 'B'].map(c => <Box key={c} sx={{ width: 48, textAlign: 'center' }}><Typography sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, fontWeight: 700 }}>{c}</Typography></Box>)}
+                          <Box sx={{ width: 36 }} />
+                          {['C', 'D'].map(c => <Box key={c} sx={{ width: 48, textAlign: 'center' }}><Typography sx={{ color: 'rgba(255,255,255,0.3)', fontSize: 11, fontWeight: 700 }}>{c}</Typography></Box>)}
                         </Box>
                         {/* Seat rows */}
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
-                          {rows.map((row, ri) => (
-                            <Box key={ri} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              {/* Row number */}
-                              <Typography sx={{ color: 'rgba(255,255,255,0.15)', fontSize: 10, width: 16, textAlign: 'right', mr: 0.5 }}>{ri + 1}</Typography>
-                              {/* Left seats (first 2) */}
-                              {row.slice(0, 2).map((seat: any) => {
-                                const isSel = selectedSeatIds.includes(seat.id);
-                                return (
-                                  <Box key={seat.id} onClick={() => toggleSeat(seat)} sx={{
-                                    width: 48, height: 44, borderRadius: '8px 8px 4px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative',
-                                    background: isSel ? 'rgba(79,172,254,0.25)' : 'rgba(67,233,123,0.08)',
-                                    border: `2px solid ${isSel ? '#4facfe' : 'rgba(67,233,123,0.25)'}`,
-                                    boxShadow: isSel ? '0 0 12px rgba(79,172,254,0.3)' : 'none',
-                                    transition: 'all 0.2s', '&:hover': { transform: 'scale(1.08)', borderColor: '#4facfe', boxShadow: '0 0 12px rgba(79,172,254,0.2)' },
-                                  }}>
-                                    {/* Seat back decoration */}
-                                    <Box sx={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: 4, borderRadius: '4px 4px 0 0', background: isSel ? 'rgba(79,172,254,0.4)' : 'rgba(67,233,123,0.2)' }} />
-                                    <AirlineSeatReclineNormal sx={{ fontSize: 14, color: isSel ? '#4facfe' : 'rgba(255,255,255,0.2)', mb: -0.3 }} />
-                                    <Typography sx={{ color: isSel ? '#4facfe' : '#43e97b', fontWeight: 700, fontSize: 11 }}>{seat.no_kursi}</Typography>
-                                  </Box>
-                                );
-                              })}
-                              {/* Padding if left side < 2 */}
-                              {row.length < 2 && <Box sx={{ width: 48 }} />}
-                              {/* Aisle */}
-                              <Box sx={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <Box sx={{ width: 2, height: 28, background: 'rgba(255,255,255,0.06)', borderRadius: 1 }} />
+                          {rowNums.map(rowNum => (
+                            <Box key={rowNum} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              {/* Left: A, B */}
+                              {renderSeat(rowMap[rowNum]?.['A'] || null, `A${rowNum}`)}
+                              {renderSeat(rowMap[rowNum]?.['B'] || null, `B${rowNum}`)}
+                              {/* Row number in center (aisle) */}
+                              <Box sx={{ width: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Typography sx={{ color: 'rgba(255,255,255,0.2)', fontSize: 12, fontWeight: 700 }}>{rowNum}</Typography>
                               </Box>
-                              {/* Right seats (last 2) */}
-                              {row.slice(2, 4).map((seat: any) => {
-                                const isSel = selectedSeatIds.includes(seat.id);
-                                return (
-                                  <Box key={seat.id} onClick={() => toggleSeat(seat)} sx={{
-                                    width: 48, height: 44, borderRadius: '8px 8px 4px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative',
-                                    background: isSel ? 'rgba(79,172,254,0.25)' : 'rgba(67,233,123,0.08)',
-                                    border: `2px solid ${isSel ? '#4facfe' : 'rgba(67,233,123,0.25)'}`,
-                                    boxShadow: isSel ? '0 0 12px rgba(79,172,254,0.3)' : 'none',
-                                    transition: 'all 0.2s', '&:hover': { transform: 'scale(1.08)', borderColor: '#4facfe', boxShadow: '0 0 12px rgba(79,172,254,0.2)' },
-                                  }}>
-                                    <Box sx={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: 4, borderRadius: '4px 4px 0 0', background: isSel ? 'rgba(79,172,254,0.4)' : 'rgba(67,233,123,0.2)' }} />
-                                    <AirlineSeatReclineNormal sx={{ fontSize: 14, color: isSel ? '#4facfe' : 'rgba(255,255,255,0.2)', mb: -0.3 }} />
-                                    <Typography sx={{ color: isSel ? '#4facfe' : '#43e97b', fontWeight: 700, fontSize: 11 }}>{seat.no_kursi}</Typography>
-                                  </Box>
-                                );
-                              })}
-                              {/* Padding if right side < 2 */}
-                              {row.length < 4 && row.length > 2 && Array.from({ length: 4 - row.length }).map((_, pi) => <Box key={`pad-${pi}`} sx={{ width: 48 }} />)}
-                              {row.length <= 2 && <><Box sx={{ width: 48 }} /><Box sx={{ width: 48 }} /></>}
+                              {/* Right: C, D */}
+                              {renderSeat(rowMap[rowNum]?.['C'] || null, `C${rowNum}`)}
+                              {renderSeat(rowMap[rowNum]?.['D'] || null, `D${rowNum}`)}
                             </Box>
                           ))}
+                        </Box>
+                        {/* BORDES bottom */}
+                        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1.5, gap: 1, alignItems: 'center' }}>
+                          <Box sx={{ height: 1, flex: 1, background: 'rgba(255,255,255,0.06)' }} />
+                          <Wc sx={{ color: 'rgba(255,255,255,0.2)', fontSize: 16 }} />
+                          <Typography sx={{ color: 'rgba(255,255,255,0.25)', fontSize: 10, fontWeight: 700, letterSpacing: 2 }}>BORDES</Typography>
+                          <Box sx={{ height: 1, flex: 1, background: 'rgba(255,255,255,0.06)' }} />
                         </Box>
                       </Box>
                     </Card>
@@ -284,7 +320,7 @@ export default function PesanTiket({ initialJadwal, onBack }: Props) {
                 <CardContent sx={{ p: 2.5 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                     <Typography sx={{ color: '#4facfe', fontWeight: 600, fontSize: 14 }}>Penumpang {i + 1}</Typography>
-                    <Chip label={`Kursi ${availableSeats.find(s => s.id === p.id_kursi)?.no_kursi || '-'}`} size="small" sx={{ background: 'rgba(79,172,254,0.15)', color: '#4facfe', fontWeight: 600, fontSize: 11 }} />
+                    <Chip label={`Kursi ${allSeats.find(s => s.id === p.id_kursi)?.no_kursi || '-'}`} size="small" sx={{ background: 'rgba(79,172,254,0.15)', color: '#4facfe', fontWeight: 600, fontSize: 11 }} />
                   </Box>
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={5}><TextField label="NIK" value={p.NIK} onChange={e => updatePassenger(i, 'NIK', e.target.value)} fullWidth size="small" sx={tf} /></Grid>
