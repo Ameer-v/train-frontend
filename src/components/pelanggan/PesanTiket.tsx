@@ -157,28 +157,111 @@ export default function PesanTiket({ initialJadwal, onBack }: Props) {
             </Card>
           )}
           <Typography sx={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, mb: 2 }}>Pilih {passengers.length} kursi ({selectedSeatIds.length}/{passengers.length} dipilih)</Typography>
-          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
             <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: 1, background: '#43e97b' }} />} label="Tersedia" size="small" sx={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', fontSize: 11 }} />
             <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: 1, background: '#4facfe' }} />} label="Dipilih" size="small" sx={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', fontSize: 11 }} />
+            <Chip icon={<Box sx={{ width: 12, height: 12, borderRadius: 1, background: 'rgba(255,255,255,0.08)' }} />} label="Terisi" size="small" sx={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', fontSize: 11 }} />
           </Box>
-          {seatLoading ? <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={30} sx={{ color: '#4facfe' }} /></Box> : (
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {availableSeats.map(seat => {
-                const isSelected = selectedSeatIds.includes(seat.id);
-                return (
-                  <Box key={seat.id} onClick={() => toggleSeat(seat)} sx={{
-                    width: 52, height: 52, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                    background: isSelected ? 'rgba(79,172,254,0.2)' : 'rgba(67,233,123,0.1)',
-                    border: `2px solid ${isSelected ? '#4facfe' : 'rgba(67,233,123,0.3)'}`,
-                    transition: 'all 0.2s', '&:hover': { transform: 'scale(1.1)', borderColor: '#4facfe' },
-                  }}>
-                    <Typography sx={{ color: isSelected ? '#4facfe' : '#43e97b', fontWeight: 700, fontSize: 13 }}>{seat.no_kursi}</Typography>
-                  </Box>
-                );
-              })}
-            </Box>
-          )}
-          {availableSeats.length === 0 && !seatLoading && <Typography sx={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', py: 4 }}>Tidak ada kursi tersedia</Typography>}
+          {seatLoading ? <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress size={30} sx={{ color: '#4facfe' }} /></Box> : (() => {
+            // Group seats by gerbong
+            const gerbongMap: Record<number, { nama: string; seats: any[] }> = {};
+            availableSeats.forEach(seat => {
+              const gId = seat.id_gerbong || 0;
+              if (!gerbongMap[gId]) gerbongMap[gId] = { nama: seat.gerbong?.nama_gerbong || `Gerbong ${gId}`, seats: [] };
+              gerbongMap[gId].seats.push(seat);
+            });
+            const gerbongs = Object.entries(gerbongMap);
+            if (gerbongs.length === 0) return <Typography sx={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', py: 4 }}>Tidak ada kursi tersedia</Typography>;
+            return (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {gerbongs.map(([gId, g]) => {
+                  // Arrange seats in rows of 4 (2 | aisle | 2)
+                  const sorted = [...g.seats].sort((a, b) => {
+                    const nA = parseInt(a.no_kursi.replace(/\D/g, '')) || 0;
+                    const nB = parseInt(b.no_kursi.replace(/\D/g, '')) || 0;
+                    return nA - nB;
+                  });
+                  const rows: any[][] = [];
+                  for (let i = 0; i < sorted.length; i += 4) rows.push(sorted.slice(i, i + 4));
+                  return (
+                    <Card key={gId} sx={{ ...cs, overflow: 'visible', position: 'relative' }}>
+                      {/* Carriage header */}
+                      <Box sx={{ background: 'linear-gradient(135deg, rgba(79,172,254,0.15) 0%, rgba(0,242,254,0.08) 100%)', borderBottom: '1px solid rgba(79,172,254,0.15)', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, borderRadius: '12px 12px 0 0' }}>
+                        <Box sx={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(79,172,254,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Train sx={{ color: '#4facfe', fontSize: 18 }} />
+                        </Box>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography sx={{ color: 'white', fontWeight: 700, fontSize: 14 }}>{g.nama}</Typography>
+                          <Typography sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 11 }}>{g.seats.length} kursi tersedia</Typography>
+                        </Box>
+                        <AirlineSeatReclineNormal sx={{ color: 'rgba(255,255,255,0.2)', fontSize: 20 }} />
+                      </Box>
+                      {/* Carriage body */}
+                      <Box sx={{ p: 2, background: 'linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.1) 100%)' }}>
+                        {/* Train shape decoration */}
+                        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1.5 }}>
+                          <Typography sx={{ color: 'rgba(255,255,255,0.15)', fontSize: 10, letterSpacing: 3, textTransform: 'uppercase' }}>← Depan &nbsp;&nbsp;│&nbsp;&nbsp; Belakang →</Typography>
+                        </Box>
+                        {/* Seat rows */}
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, alignItems: 'center' }}>
+                          {rows.map((row, ri) => (
+                            <Box key={ri} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              {/* Row number */}
+                              <Typography sx={{ color: 'rgba(255,255,255,0.15)', fontSize: 10, width: 16, textAlign: 'right', mr: 0.5 }}>{ri + 1}</Typography>
+                              {/* Left seats (first 2) */}
+                              {row.slice(0, 2).map((seat: any) => {
+                                const isSel = selectedSeatIds.includes(seat.id);
+                                return (
+                                  <Box key={seat.id} onClick={() => toggleSeat(seat)} sx={{
+                                    width: 48, height: 44, borderRadius: '8px 8px 4px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative',
+                                    background: isSel ? 'rgba(79,172,254,0.25)' : 'rgba(67,233,123,0.08)',
+                                    border: `2px solid ${isSel ? '#4facfe' : 'rgba(67,233,123,0.25)'}`,
+                                    boxShadow: isSel ? '0 0 12px rgba(79,172,254,0.3)' : 'none',
+                                    transition: 'all 0.2s', '&:hover': { transform: 'scale(1.08)', borderColor: '#4facfe', boxShadow: '0 0 12px rgba(79,172,254,0.2)' },
+                                  }}>
+                                    {/* Seat back decoration */}
+                                    <Box sx={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: 4, borderRadius: '4px 4px 0 0', background: isSel ? 'rgba(79,172,254,0.4)' : 'rgba(67,233,123,0.2)' }} />
+                                    <AirlineSeatReclineNormal sx={{ fontSize: 14, color: isSel ? '#4facfe' : 'rgba(255,255,255,0.2)', mb: -0.3 }} />
+                                    <Typography sx={{ color: isSel ? '#4facfe' : '#43e97b', fontWeight: 700, fontSize: 11 }}>{seat.no_kursi}</Typography>
+                                  </Box>
+                                );
+                              })}
+                              {/* Padding if left side < 2 */}
+                              {row.length < 2 && <Box sx={{ width: 48 }} />}
+                              {/* Aisle */}
+                              <Box sx={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Box sx={{ width: 2, height: 28, background: 'rgba(255,255,255,0.06)', borderRadius: 1 }} />
+                              </Box>
+                              {/* Right seats (last 2) */}
+                              {row.slice(2, 4).map((seat: any) => {
+                                const isSel = selectedSeatIds.includes(seat.id);
+                                return (
+                                  <Box key={seat.id} onClick={() => toggleSeat(seat)} sx={{
+                                    width: 48, height: 44, borderRadius: '8px 8px 4px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative',
+                                    background: isSel ? 'rgba(79,172,254,0.25)' : 'rgba(67,233,123,0.08)',
+                                    border: `2px solid ${isSel ? '#4facfe' : 'rgba(67,233,123,0.25)'}`,
+                                    boxShadow: isSel ? '0 0 12px rgba(79,172,254,0.3)' : 'none',
+                                    transition: 'all 0.2s', '&:hover': { transform: 'scale(1.08)', borderColor: '#4facfe', boxShadow: '0 0 12px rgba(79,172,254,0.2)' },
+                                  }}>
+                                    <Box sx={{ position: 'absolute', top: 0, left: '15%', right: '15%', height: 4, borderRadius: '4px 4px 0 0', background: isSel ? 'rgba(79,172,254,0.4)' : 'rgba(67,233,123,0.2)' }} />
+                                    <AirlineSeatReclineNormal sx={{ fontSize: 14, color: isSel ? '#4facfe' : 'rgba(255,255,255,0.2)', mb: -0.3 }} />
+                                    <Typography sx={{ color: isSel ? '#4facfe' : '#43e97b', fontWeight: 700, fontSize: 11 }}>{seat.no_kursi}</Typography>
+                                  </Box>
+                                );
+                              })}
+                              {/* Padding if right side < 2 */}
+                              {row.length < 4 && row.length > 2 && Array.from({ length: 4 - row.length }).map((_, pi) => <Box key={`pad-${pi}`} sx={{ width: 48 }} />)}
+                              {row.length <= 2 && <><Box sx={{ width: 48 }} /><Box sx={{ width: 48 }} /></>}
+                            </Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    </Card>
+                  );
+                })}
+              </Box>
+            );
+          })()}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 3 }}>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Button onClick={addPassenger} startIcon={<Add />} size="small" sx={{ color: '#4facfe', textTransform: 'none', fontSize: 12 }}>Tambah Penumpang</Button>
